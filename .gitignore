@@ -15,3 +15,29 @@ project/plugins/project/
 # Scala-IDE specific
 .scala_dependencies
 .worksheet
+
+# IDE
+/*/.idea/
+/*/.idea_modules/
+/*/.classpath
+/*/.project
+/*/.settings
+/*/.cache
+/*/*.iml
+/*/*.ipr
+/*/*.iws
+
+/tools/*/.idea/
+/tools/*/.idea_modules/
+/tools/*/.classpath
+/tools/*/.project
+/tools/*/.settings
+/tools/*/.cache
+/tools/*/*.iml
+
+/tools/documentation/allonsy-admin/build/*
+
+.scala_dependencies
+
+.DS_Store
+console/
