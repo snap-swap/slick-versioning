@@ -1,6 +1,6 @@
 name := "slick-versioning"
 
-version := "1.0.0"
+version := "1.0.1"
 
 organization := "com.snapswap"
 
@@ -31,8 +31,8 @@ libraryDependencies ++= {
 
   Seq(
     "com.typesafe.slick" %% "slick" % slickV,
-    "org.scalatest" %% "scalatest" % "2.2.6" % "test",
-    "com.opentable.components" % "otj-pg-embedded" % "0.7.1" % "test",
-    "com.fasterxml.uuid" % "java-uuid-generator" % "3.1.4"
+    "ch.qos.logback" % "logback-classic" % "1.1.7" % "test",
+    "org.scalatest" %% "scalatest" % "3.0.1" % "test",
+    "com.opentable.components" % "otj-pg-embedded" % "0.7.1" % "test"
   )
 }

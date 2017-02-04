@@ -122,7 +122,7 @@ trait Versioning[DataIdDatabaseType, VersionIdDatabaseType, VersionDtType, Versi
       * */
       private def transformVersion(data: H, dataId: DataId, version: VersionId, createdAt: VersionDt, deletedAt: Option[VersionDt]): H = {
 
-        //TODO consider initing instance from tuple avoiding a hard reflection
+        //TODO consider initing instance from a tuple avoiding hard reflection
 
         val `class` = data.getClass
         val constructor = `class`.getConstructors.head

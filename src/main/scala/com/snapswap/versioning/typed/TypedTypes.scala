@@ -2,9 +2,9 @@ package com.snapswap.versioning.typed
 
 import java.sql.Timestamp
 import java.time.LocalDateTime
+import java.util.UUID
 
 import com.snapswap.versioning.abstractt.Types
-import com.fasterxml.uuid.Generators
 import com.snapswap.versioning.utils.{LocalDateTimeHelper, StringToPostgresHash}
 import slick.jdbc.PostgresProfile.api._
 
@@ -60,7 +60,7 @@ trait TypedTypes extends Types[String, String, LocalDateTime, Timestamp] {
 
   object VersionId {
     def random(): VersionId =
-      VersionIdClass(Generators.timeBasedGenerator.generate().toString)
+      VersionIdClass(UUID.randomUUID().toString)
   }
 
 
