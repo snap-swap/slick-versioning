@@ -1,8 +1,11 @@
 package com.snapswap.versioning.abstractt
 
-import slick.jdbc.PostgresProfile.api._
+import slick.ast.BaseTypedType
+import slick.jdbc.{JdbcProfile, JdbcType}
 
-trait Types[DataIdDatabaseType, VersionIdDatabaseType, VersionDtType, VersionDtDatabaseType] {
+trait Types[DataIdDatabaseType, VersionIdDatabaseType, VersionDtType, VersionDtDatabaseType] extends JdbcProfile {
+
+  object API extends API
 
   protected type BaseDataId = DataIdDatabaseType
   protected type BaseVersionId = VersionIdDatabaseType
@@ -26,12 +29,6 @@ trait Types[DataIdDatabaseType, VersionIdDatabaseType, VersionDtType, VersionDtD
   }
 
 
-  /*
-  * Slick base type converters
-  * */
-  implicit def dataIdMapper: BaseColumnType[DataId]
-
-  implicit def versionIdMapper: BaseColumnType[VersionId]
-
-  implicit def versionDtMapper: BaseColumnType[VersionDt]
+  //type for implicit conversion scala to jdbc types
+  type MapperType[T] = JdbcType[T] with BaseTypedType[T]
 }

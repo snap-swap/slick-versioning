@@ -1,8 +1,8 @@
 package com.snapswap.versioning.abstractt
 
-import slick.jdbc.PostgresProfile.api._
-import slick.lifted.{CanBeQueryCondition, Tag}
+import slick.lifted.CanBeQueryCondition
 import slick.sql.SqlProfile.ColumnOption.{NotNull, Nullable}
+
 import scala.concurrent.ExecutionContext
 
 
@@ -15,6 +15,8 @@ trait Versioning[DataIdDatabaseType, VersionIdDatabaseType, VersionDtType, Versi
   //must returns random unique VersionId
   protected def randomVersion(): VersionId
 
+
+  import API._
 
   /*
   * Base trait for versioned data representation
@@ -63,7 +65,10 @@ trait Versioning[DataIdDatabaseType, VersionIdDatabaseType, VersionDtType, Versi
                                                             idColumnName: String = "id",
                                                             versionIdColumnName: String = "version",
                                                             createdAtColumnName: String = "created_at",
-                                                            deletedAtColumnName: String = "deleted_at") extends Table[H](tag, schema, table: String) {
+                                                            deletedAtColumnName: String = "deleted_at")
+                                                           (implicit dataIdMapper: MapperType[DataId],
+                                                            versionIdMapper: MapperType[VersionId],
+                                                            versionDtMapper: MapperType[VersionDt]) extends Table[H](tag, schema, table: String) {
 
     final def dataId = column[DataId](idColumnName, NotNull)
 
@@ -84,7 +89,10 @@ trait Versioning[DataIdDatabaseType, VersionIdDatabaseType, VersionDtType, Versi
   * */
   trait HistoricalSql[D, H <: HistoricalData[D], T <: HistoricalTable[D, H]] {
 
-    implicit class TableImporter(table: TableQuery[T]) {
+    implicit class TableImporter(table: TableQuery[T])
+                                (implicit dataIdMapper: MapperType[DataId],
+                                 versionIdMapper: MapperType[VersionId],
+                                 versionDtMapper: MapperType[VersionDt]) {
 
       /*
       * SELECT OPERATORS, output result contains only actual versions

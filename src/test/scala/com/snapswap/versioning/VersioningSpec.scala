@@ -6,45 +6,50 @@ import java.util.UUID
 import com.snapswap.versioning.typed.DataVersioning._
 import com.snapswap.versioning.utils.LocalDateTimeHelper._
 import org.postgresql.util.PSQLException
-import org.scalatest.{Matchers, WordSpecLike}
-import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.time.{Millis, Seconds, Span}
-import slick.jdbc.PostgresProfile.api._
+import org.scalatest.{AsyncWordSpec, Matchers}
+//import slick.jdbc.PostgresProfile.api._
+import com.snapswap.db.driver.ExtendedPostgresProfile.api._
 import slick.lifted.Tag
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class VersioningSpec
-  extends WordSpecLike
-    with ScalaFutures
+  extends AsyncWordSpec
     with Matchers
     with TestDb {
 
   "For any historical table" when {
     "hInsert" should {
-      "return inserted version" in new Setup {
+      "return inserted version" in {
+        import Setup._
+
         val toInsert = HistoricalTestData.random()
 
         def action = db.run(table.hInsert(toInsert))
 
-        whenReady(prepare(action)) { inserted =>
+        prepare(action).map { inserted =>
           inserted.toData shouldBe toInsert.toData
           inserted.versionDeletedAt shouldBe empty
           inserted.versionId should not be toInsert.versionId
         }
       }
-      "insert actual version of data (even if a given data looks not like an actual version)" in new Setup {
+      "insert actual version of data (even if a given data looks not like an actual version)" in {
+        import Setup._
+
         val toInsert = HistoricalTestData.random(versionDeletedAt = Some(VersionDt.nowUTC()))
 
         def action = db.run(table.hInsert(toInsert))
 
-        whenReady(prepare(action)) { inserted =>
+        prepare(action).map { inserted =>
           inserted.toData shouldBe toInsert.toData
           inserted.versionDeletedAt shouldBe empty
         }
       }
-      "fails (db error must be thrown) when inserting data with an existing dataId" in new Setup {
+      "fails (db error must be thrown) when inserting data with an existing dataId" in {
+        import Setup._
+
         val data1 = HistoricalTestData.random()
         val data2 = HistoricalTestData.random(dataId = data1.dataId)
 
@@ -53,11 +58,13 @@ class VersioningSpec
           _ <- db.run(table.hInsert(data2))
         } yield ()
 
-        whenReady(prepare(action).failed) { result =>
+        prepare(action).failed.map { result =>
           result shouldBe a[PSQLException]
         }
       }
-      "success when inserting data with the same dataId as an earlier existing dataId" in new Setup {
+      "success when inserting data with the same dataId as an earlier existing dataId" in {
+        import Setup._
+
         val data1 = HistoricalTestData.random()
         val data2 = HistoricalTestData.random(dataId = data1.dataId)
 
@@ -68,7 +75,7 @@ class VersioningSpec
           select <- db.run(table.result)
         } yield select
 
-        whenReady(prepare(action)) { result =>
+        prepare(action).map { result =>
           result.length shouldBe 2
         }
       }
@@ -76,7 +83,9 @@ class VersioningSpec
 
 
     "hDelete" should {
-      "return dataId and versionId for deleted versions" in new Setup {
+      "return dataId and versionId for deleted versions" in {
+        import Setup._
+
         val data1 = HistoricalTestData.random()
         val data2 = HistoricalTestData.random()
 
@@ -86,11 +95,13 @@ class VersioningSpec
           deleted <- db.run(table.hDelete(_.dataId === data2.dataId))
         } yield (inserted, deleted)
 
-        whenReady(prepare(action)) { case (inserted, deleted) =>
+        prepare(action).map { case (inserted, deleted) =>
           Seq((inserted.dataId, inserted.versionId)) shouldBe deleted
         }
       }
-      "delete only actual versions corresponding a given condition" in new Setup {
+      "delete only actual versions corresponding a given condition" in {
+        import Setup._
+
         val data1 = HistoricalTestData.random()
         val data2 = HistoricalTestData.random(dataValue = data1.dataValue)
         val data3 = HistoricalTestData.random(dataValue = data1.dataValue)
@@ -107,14 +118,16 @@ class VersioningSpec
           deleted <- db.run(table.hDelete(_.dataValue === data1.dataValue))
         } yield (allVersions, actualBeforeDeletion, deleted)
 
-        whenReady(prepare(action)) { case (allVersions, actualBeforeDeletion, deleted) =>
+        prepare(action).map { case (allVersions, actualBeforeDeletion, deleted) =>
           allVersions.length shouldBe 4
           actualBeforeDeletion.length shouldBe 3
           deleted should have size 2
           deleted shouldBe actualBeforeDeletion.filter(_.dataValue == data1.dataValue).map { v => (v.dataId, v.versionId) }
         }
       }
-      "correctly set versionDeletedAt for an actual version, leave other fields unchanged" in new Setup {
+      "correctly set versionDeletedAt for an actual version, leave other fields unchanged" in {
+        import Setup._
+
         val data = HistoricalTestData.random()
 
         def action = for {
@@ -123,7 +136,7 @@ class VersioningSpec
           afterDeletion <- db.run(table.result)
         } yield (inserted, afterDeletion)
 
-        whenReady(prepare(action)) { case (inserted, afterDeletion) =>
+        prepare(action).map { case (inserted, afterDeletion) =>
           afterDeletion should have size 1
           afterDeletion.head.copy(versionDeletedAt = inserted.versionDeletedAt) shouldBe inserted
         }
@@ -131,7 +144,9 @@ class VersioningSpec
     }
 
     "use hUpdate and hUpdateRow methods" should {
-      "return actual version after update" in new Setup {
+      "return actual version after update" in {
+        import Setup._
+
         val data = HistoricalTestData.random()
         val upd = data.copy(dataValue = "updated")
 
@@ -143,12 +158,14 @@ class VersioningSpec
           afterUpdate2 <- db.run(table.hSelectAll.result)
         } yield (updateResult1, afterUpdate1, updateResult2, afterUpdate2)
 
-        whenReady(prepare(action)) { case (updateResult1, afterUpdate1, updateResult2, afterUpdate2) =>
+        prepare(action).map { case (updateResult1, afterUpdate1, updateResult2, afterUpdate2) =>
           updateResult1.map(Seq(_)).getOrElse(Seq.empty) shouldBe afterUpdate1
           updateResult2 shouldBe afterUpdate2
         }
       }
-      "do nothing if there is no actual versions corresponding the given condition" in new Setup {
+      "do nothing if there is no actual versions corresponding the given condition" in {
+        import Setup._
+
         val data = HistoricalTestData.random()
         val upd = HistoricalTestData.random()
 
@@ -159,12 +176,14 @@ class VersioningSpec
           afterUpdate <- db.run(table.result)
         } yield (beforeUpdate, afterUpdate, updateResult)
 
-        whenReady(prepare(action)) { case (beforeUpdate, afterUpdate, updateResult) =>
+        prepare(action).map { case (beforeUpdate, afterUpdate, updateResult) =>
           beforeUpdate shouldBe afterUpdate
           updateResult shouldBe empty
         }
       }
-      "do nothing by default (we can override this behaviour for any historical class) if there is no changes for found data" in new Setup {
+      "do nothing by default (we can override this behaviour for any historical class) if there is no changes for found data" in {
+        import Setup._
+
         val data = HistoricalTestData.random()
         val upd = data
 
@@ -175,12 +194,14 @@ class VersioningSpec
           afterUpdate <- db.run(table.result)
         } yield (beforeUpdate, afterUpdate, updateResult)
 
-        whenReady(prepare(action)) { case (beforeUpdate, afterUpdate, updateResult) =>
+        prepare(action).map { case (beforeUpdate, afterUpdate, updateResult) =>
           beforeUpdate shouldBe afterUpdate
           updateResult shouldBe empty
         }
       }
-      "for found data delete actual version and add new one, deleted timestamp for the old version must be the same as created for the new one" in new Setup {
+      "for found data delete actual version and add new one, deleted timestamp for the old version must be the same as created for the new one" in {
+        import Setup._
+
         val data = HistoricalTestData.random()
         val upd = HistoricalTestData.random(dataId = data.dataId)
 
@@ -190,7 +211,7 @@ class VersioningSpec
           afterUpdate <- db.run(table.result)
         } yield (afterUpdate, updateResult)
 
-        whenReady(prepare(action)) { case (afterUpdate, updateResult) =>
+        prepare(action).map { case (afterUpdate, updateResult) =>
           val deletedVersion = afterUpdate.filterNot(_.isActual).head
           val actualVersion = afterUpdate.filter(_.isActual).head
 
@@ -201,7 +222,9 @@ class VersioningSpec
           actualVersion.toData shouldBe upd.toData
         }
       }
-      "use custom conditions to search and modify data" in new Setup {
+      "use custom conditions to search and modify data" in {
+        import Setup._
+
         val searchBy = "update me"
         val updater = (p: HistoricalTestData) => p.copy(dataValue = "updated")
 
@@ -216,15 +239,21 @@ class VersioningSpec
           updateResult <- db.run(table.hUpdate(_.dataValue === searchBy)(updater))
         } yield updateResult
 
-        whenReady(prepare(action)) { updateResult =>
+        prepare(action).map { updateResult =>
           updateResult.map(_.toData) shouldBe Seq(data2, data3).map(updater).map(_.toData)
         }
       }
-      "correctly perform concurrent update operations" in new SetupConcurrentUpdate(
-        longUpdVal = "updated by the 1st update operation", quickUpdVal = "updated by the 2nd update operation") {
+      "correctly perform concurrent update operations" in {
+        import SetupConcurrentUpdate._
 
-        val oneUpdater = (p: HistoricalTestData) => p.copy(dataValue = longUpdVal)
-        val anotherUpdater = (p: HistoricalTestData) => p.copy(otherValue = Some(quickUpdVal))
+        val conf = FreezeTransactionSetup(
+          freezeTime = Duration(4, SECONDS), triggerOnColumn = TriggeredColumn.value,
+          triggerAtValue = "updated by the 1st update operation",
+          avoidTriggerAtValueInOtherColumn = "updated by the 2nd update operation"
+        )
+
+        val oneUpdater = (p: HistoricalTestData) => p.copy(dataValue = conf.triggerAtValue)
+        val anotherUpdater = (p: HistoricalTestData) => p.copy(otherValue = Some(conf.avoidTriggerAtValueInOtherColumn))
         val data = HistoricalTestData.random()
 
         val longAction = new TimedAction[Seq[HistoricalTestData]](
@@ -232,7 +261,7 @@ class VersioningSpec
         )
 
         val quickAction = new TimedAction[Seq[HistoricalTestData]](
-          db.run(table.hUpdate(_.dataId === data.dataId)(anotherUpdater)), pgWaitForUpdateCompletionSec / 2
+          db.run(table.hUpdate(_.dataId === data.dataId)(anotherUpdater)), conf.freezeTime / 2
         )
 
         def action = for {
@@ -241,22 +270,24 @@ class VersioningSpec
           result <- db.run(table.hSelectAll.result)
         } yield result
 
-        whenReady(prepare(action)) { result =>
+        prepare(action)(conf).map { result =>
+          println(s"long action started at ${longAction.getStartPoint.get}")
+          println(s"quick action started at ${quickAction.getStartPoint.get}")
+          println(s"long action finished at ${longAction.getFinishPoint.get}")
+          println(s"quick action finished at ${quickAction.getFinishPoint.get}")
+
+
           result should have size 1
           result.head.toData shouldBe anotherUpdater(oneUpdater(data)).toData
 
           quickAction.getStartPoint should be > longAction.getStartPoint
           quickAction.getStartPoint should be < longAction.getFinishPoint
           quickAction.getFinishPoint should be >= longAction.getFinishPoint
-
-
-          println(s"long action started at ${longAction.getStartPoint.get}")
-          println(s"quick action started at ${quickAction.getStartPoint.get}")
-          println(s"long action finished at ${longAction.getFinishPoint.get}")
-          println(s"quick action finished at ${quickAction.getFinishPoint.get}")
         }
       }
-      "leave unchanged existing values in historical fields (dataId, versionId, createdAt, deletedAt)" in new Setup {
+      "leave unchanged existing values in historical fields (dataId, versionId, createdAt, deletedAt)" in {
+        import Setup._
+
         val inserted = "inserted"
         val updated1 = "updated1"
         val updated2 = "updated2"
@@ -278,7 +309,7 @@ class VersioningSpec
           results = Seq(inserted) ++ updated1.map(Seq(_)).getOrElse(Seq.empty) ++ updated2
         } yield (results.map { v => v.dataValue -> v }.toMap, allRecords)
 
-        whenReady(prepare(action)) { case (results, allRecords) =>
+        prepare(action).map { case (results, allRecords) =>
           allRecords should have size 3
           results.size shouldBe allRecords.size
           allRecords.values.forall(_.dataId == data.dataId) shouldBe true
@@ -292,10 +323,16 @@ class VersioningSpec
     }
 
 
-    "correctly perform concurrent update and delete operations" in new SetupConcurrentUpdate(
-      longUpdVal = "updated by an update operation", quickUpdVal = "") {
+    "correctly perform concurrent update and delete operations" in {
+      import SetupConcurrentUpdate._
 
-      val updater = (p: HistoricalTestData) => p.copy(dataValue = longUpdVal)
+      val conf = FreezeTransactionSetup(
+        freezeTime = Duration(4, SECONDS), triggerOnColumn = TriggeredColumn.value,
+        triggerAtValue = "updated by an update operation",
+        avoidTriggerAtValueInOtherColumn = ""
+      )
+
+      val updater = (p: HistoricalTestData) => p.copy(dataValue = conf.triggerAtValue)
       val data = HistoricalTestData.random()
 
       val longAction = new TimedAction[Seq[HistoricalTestData]](
@@ -303,7 +340,7 @@ class VersioningSpec
       )
 
       val quickAction = new TimedAction[Seq[(DataId, VersionId)]](
-        db.run(table.hDelete(_.dataId === data.dataId)), pgWaitForUpdateCompletionSec / 2
+        db.run(table.hDelete(_.dataId === data.dataId)), conf.freezeTime / 2
       )
 
       def action = for {
@@ -312,7 +349,13 @@ class VersioningSpec
         finalResult <- db.run(table.hSelectAll.result)
       } yield (concurrentResults.flatten, finalResult)
 
-      whenReady(prepare(action)) { case (concurrentResults, finalResult) =>
+      prepare(action)(conf).map { case (concurrentResults, finalResult) =>
+        println(s"long action started at ${longAction.getStartPoint.get}")
+        println(s"quick action started at ${quickAction.getStartPoint.get}")
+        println(s"long action finished at ${longAction.getFinishPoint.get}")
+        println(s"quick action finished at ${quickAction.getFinishPoint.get}")
+
+
         val updated = concurrentResults.collect { case r: HistoricalTestData => r }.head
         val deleted = concurrentResults.collect { case (id: DataIdClass, v: VersionIdClass) => (id, v) }.head
 
@@ -324,17 +367,14 @@ class VersioningSpec
         quickAction.getStartPoint should be > longAction.getStartPoint
         quickAction.getStartPoint should be < longAction.getFinishPoint
         quickAction.getFinishPoint should be >= longAction.getFinishPoint
-
-        println(s"long action started at ${longAction.getStartPoint.get}")
-        println(s"quick action started at ${quickAction.getStartPoint.get}")
-        println(s"long action finished at ${longAction.getFinishPoint.get}")
-        println(s"quick action finished at ${quickAction.getFinishPoint.get}")
       }
     }
 
 
     "hSelect" should {
-      "return only actual versions according a given condition" in new Setup {
+      "return only actual versions according a given condition" in {
+        import Setup._
+
         val searchBy = "search me"
         val data1 = HistoricalTestData.random()
         val data2 = HistoricalTestData.random(dataValue = searchBy)
@@ -350,7 +390,7 @@ class VersioningSpec
           select <- db.run(table.hSelect(_.dataValue === searchBy).result)
         } yield select
 
-        whenReady(prepare(action)) { result =>
+        prepare(action).map { result =>
           result.map(_.toData) shouldBe Seq(data2, data3).map(_.toData)
         }
       }
@@ -358,7 +398,9 @@ class VersioningSpec
 
 
     "hSelectAll" should {
-      "return all actual versions from a table" in new Setup {
+      "return all actual versions from a table" in {
+        import Setup._
+
         val data1 = HistoricalTestData.random()
         val data2 = HistoricalTestData.random()
         val data3 = HistoricalTestData.random()
@@ -373,7 +415,7 @@ class VersioningSpec
           select <- db.run(table.hSelectAll.result)
         } yield select
 
-        whenReady(prepare(action)) { result =>
+        prepare(action).map { result =>
           result.map(_.toData) shouldBe Seq(data1, data2, data3).map(_.toData)
         }
       }
@@ -381,7 +423,9 @@ class VersioningSpec
 
 
     "hUpdateOrInsert" should {
-      "execute hInsert action with a given data if there is no data with the same dataId" in new Setup {
+      "execute hInsert action with a given data if there is no data with the same dataId" in {
+        import Setup._
+
         val data1 = HistoricalTestData.random()
         val data2 = HistoricalTestData.random()
 
@@ -391,11 +435,13 @@ class VersioningSpec
           select <- db.run(table.hSelectAll.result)
         } yield select
 
-        whenReady(prepare(action)) { result =>
+        prepare(action).map { result =>
           result.map(_.toData) shouldBe Seq(data1.toData, data2.toData)
         }
       }
-      "execute hUpdateRow action with a given data if there is a data with the same dataId" in new Setup {
+      "execute hUpdateRow action with a given data if there is a data with the same dataId" in {
+        import Setup._
+
         val data1 = HistoricalTestData.random()
         val data2 = HistoricalTestData.random(dataId = data1.dataId)
 
@@ -405,14 +451,16 @@ class VersioningSpec
           select <- db.run(table.hSelectAll.result)
         } yield select
 
-        whenReady(prepare(action)) { result =>
+        prepare(action).map { result =>
           result.map(_.toData) shouldBe Seq(data2.toData)
         }
       }
     }
 
     "use columns with VersionDt type in where clause" should {
-      "be able to use '>', '<', '>=', '<=' and 'between' operators for them" in new Setup {
+      "be able to use '>', '<', '>=', '<=' and 'between' operators for them" in {
+        import Setup._
+
         val data = HistoricalTestData.random()
 
         def action = for {
@@ -424,7 +472,7 @@ class VersioningSpec
           between <- db.run(table.hSelect(_.versionCreatedAt between(dt.minusDays(1), dt)).result)
         } yield (less, lessEq, more, moreEq, between)
 
-        whenReady(prepare(action)) { case (less, lessEq, more, moreEq, between) =>
+        prepare(action).map { case (less, lessEq, more, moreEq, between) =>
           less shouldBe empty
           lessEq should not be empty
           more shouldBe empty
@@ -438,19 +486,59 @@ class VersioningSpec
   }
 
 
-  implicit override val patienceConfig = PatienceConfig(timeout = Span(50, Seconds), interval = Span(50, Millis))
+  object SetupConcurrentUpdate extends Setup {
+
+    def prepare[R](a: => Future[R])(conf: FreezeTransactionSetup): Future[R] =
+      prepareAction(a)(conf.trigger)
 
 
-  class SetupConcurrentUpdate(val longUpdVal: String, val quickUpdVal: String) extends Setup {
+    object TriggeredColumn extends Enumeration {
+      type ColumnName = Value
+      val value, other_value = Value
+    }
 
-    def pgWaitForUpdateCompletionSec: Int = 4
+    /*
+    * Note that trigger performs freeze transaction only when "$triggerOnColumn" column updated with $triggerOnColumn value
+    * and "$notTriggerOnColumn" column doesn't updated with "avoidTriggerAtValueInOtherColumn" value
+    * */
+    case class FreezeTransactionSetup(freezeTime: Duration,
+                                      triggerOnColumn: TriggeredColumn.ColumnName,
+                                      triggerAtValue: String,
+                                      avoidTriggerAtValueInOtherColumn: String) {
 
-    class TimedAction[T](action: => Future[T], delaySec: Int = 0) {
+      private val notTriggerOnColumn: String = (triggerOnColumn match {
+        case TriggeredColumn.value =>
+          TriggeredColumn.other_value
+        case TriggeredColumn.other_value =>
+          TriggeredColumn.value
+      }).toString
+
+      val trigger: String =
+        s"""
+           |create or replace function fnDelay() returns trigger as ${"$$"}
+           |begin
+           |  perform pg_sleep(${freezeTime.toSeconds});
+           |  return null;
+           |end;
+           |${"$$"} language plpgsql;
+           |
+         |create trigger trg_${tableName}_update_delay
+           |after update on $tableName
+           |for each row
+           |when (
+           |  (NEW.$notTriggerOnColumn != '$avoidTriggerAtValueInOtherColumn' or NEW.$notTriggerOnColumn is null)
+           |  and NEW.${triggerOnColumn.toString} = '$triggerAtValue'
+           |)
+           |execute procedure fnDelay();
+       """.stripMargin
+    }
+
+    class TimedAction[T](action: => Future[T], delaySec: Duration = Duration(0, SECONDS)) {
       private var startedAt: Option[LocalDateTime] = None
       private var finishedAt: Option[LocalDateTime] = None
 
       def run(): Future[T] = {
-        Thread.sleep(delaySec.toLong * 1000)
+        Thread.sleep(delaySec.toMillis)
         for {
           _ <- Future.successful(startedAt = Some(nowUTC()))
           result <- action
@@ -463,61 +551,48 @@ class VersioningSpec
       def getFinishPoint: Option[LocalDateTime] = finishedAt
     }
 
-    override protected def othersSqlScripts() =
-      s"""
-         |create or replace function fnDelay() returns trigger as ${"$$"}
-         |begin
-         |  perform pg_sleep($pgWaitForUpdateCompletionSec);
-         |  return null;
-         |end;
-         |${"$$"} language plpgsql;
-         |
-         |create trigger trg_${tableName}_update_delay
-         |after update on $tableName
-         |for each row
-         |when ((NEW.other_value != '$quickUpdVal' or NEW.other_value is null) and NEW.value = '$longUpdVal')
-         |execute procedure fnDelay();
-       """.stripMargin
   }
+
+
+  object Setup extends Setup
 
   trait Setup extends HistoricalSql[TestData, HistoricalTestData, TestHistoricalTable] {
 
     val table = TableQuery[TestHistoricalTable]
 
     def prepare[R](a: => Future[R]): Future[R] =
-      dropOrCreateTable().flatMap(_ => a)
+      prepareAction(a)("")
 
 
-    protected def othersSqlScripts(): String = ""
+    protected def prepareAction[R](a: => Future[R])(additionalScripts: String): Future[R] =
+      dropOrCreateTable(additionalScripts).flatMap(_ => a)
 
     protected def tableName = table.shaped.value.tableName
 
-    private def createTable(tableName: String) = {
+    private def createTable(tableName: String, othersSqlScripts: String) = {
       table.schema.create.andThen(
         for {
           _ <- sql"alter table #$tableName add constraint PK_#$tableName primary key(id, version)".as[Int]
           _ <- sql"create unique index idx_#${tableName}_id on #$tableName(id) where deleted_at is null".as[Int]
-          _ <- sql"#${othersSqlScripts()}".as[Int]
+          _ <- sql"#$othersSqlScripts".as[Int]
         } yield ()
       )
     }
 
-    private def dropOrCreateTable() = {
+    private def dropOrCreateTable(othersSqlScripts: String) = db.run(
+      for {
+        found <- sql"""select table_name from "information_schema"."tables" where table_name = $tableName""".as[String].headOption
+        _ <- found match {
+          case Some(_) =>
+            table.schema.drop.andThen(
+              createTable(tableName, othersSqlScripts)
+            )
+          case None =>
+            createTable(tableName, othersSqlScripts)
+        }
+      } yield ()
+    )
 
-      db.run(
-        for {
-          found <- sql"""select table_name from "information_schema"."tables" where table_name = $tableName""".as[String].headOption
-          _ <- found match {
-            case Some(_) =>
-              table.schema.drop.andThen(
-                createTable(tableName)
-              )
-            case None =>
-              createTable(tableName)
-          }
-        } yield ()
-      )
-    }
 
   }
 
