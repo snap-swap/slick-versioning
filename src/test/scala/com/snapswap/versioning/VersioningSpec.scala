@@ -7,8 +7,7 @@ import com.snapswap.versioning.typed.DataVersioning._
 import com.snapswap.versioning.utils.LocalDateTimeHelper._
 import org.postgresql.util.PSQLException
 import org.scalatest.{AsyncWordSpec, Matchers}
-//import slick.jdbc.PostgresProfile.api._
-import com.snapswap.db.driver.ExtendedPostgresProfile.api._
+import slick.jdbc.PostgresProfile.api._
 import slick.lifted.Tag
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -396,6 +395,38 @@ class VersioningSpec
       }
     }
 
+    "hSelectPast" should {
+      "return actual versions for the certain time point according a given condition" in {
+        import Setup._
+
+        val searchBy = "search me"
+        val data1 = HistoricalTestData.random(dataValue = searchBy)
+        val data2 = HistoricalTestData.random(dataValue = searchBy)
+        val data3 = HistoricalTestData.random(dataValue = searchBy)
+        val data4 = HistoricalTestData.random(otherValue = Some("must not be selected"))
+
+        val timeLag = new TimedAction[Unit](Future.successful(()), Duration(50, MILLISECONDS))
+
+        def action = for {
+          _ <- db.run(table.hInsert(data4))
+          _ <- db.run(table.hInsert(data1))
+          _ <- db.run(table.hInsert(data2))
+          _ <- db.run(table.hUpdateRow(data2.copy(otherValue = Some("must not be selected"))))
+          _ <- db.run(table.hDelete(_.dataId === data1.id.asDataId))
+          _ <- db.run(table.hUpdateRow(data2.copy(otherValue = Some("must be selected"))))
+          _ <- timeLag.run()
+          timePoint = nowUTC()
+          _ <- timeLag.run()
+          _ <- db.run(table.hInsert(data3))
+          _ <- db.run(table.hDelete(_.dataId === data2.id.asDataId))
+          select <- db.run(table.hSelectPast(timePoint)(_.dataValue === searchBy).result)
+        } yield select
+
+        prepare(action).map { result =>
+          result.map(_.toData) shouldBe Seq(data2.copy(otherValue = Some("must be selected"))).map(_.toData)
+        }
+      }
+    }
 
     "hSelectAll" should {
       "return all actual versions from a table" in {
@@ -421,6 +452,38 @@ class VersioningSpec
       }
     }
 
+    "hSelectPastAll" should {
+      "return all actual versions for the certain time point" in {
+        import Setup._
+
+        val searchBy = "search me"
+        val data1 = HistoricalTestData.random(dataValue = searchBy)
+        val data2 = HistoricalTestData.random(dataValue = searchBy)
+        val data3 = HistoricalTestData.random(dataValue = searchBy)
+        val data4 = HistoricalTestData.random(otherValue = Some("must be selected"))
+
+        val timeLag = new TimedAction[Unit](Future.successful(()), Duration(50, MILLISECONDS))
+
+        def action = for {
+          _ <- db.run(table.hInsert(data4))
+          _ <- db.run(table.hInsert(data1))
+          _ <- db.run(table.hInsert(data2))
+          _ <- db.run(table.hUpdateRow(data2.copy(otherValue = Some("must not be selected"))))
+          _ <- db.run(table.hDelete(_.dataId === data1.id.asDataId))
+          _ <- db.run(table.hUpdateRow(data2.copy(otherValue = Some("must be selected"))))
+          _ <- timeLag.run()
+          timePoint = nowUTC()
+          _ <- timeLag.run()
+          _ <- db.run(table.hInsert(data3))
+          _ <- db.run(table.hDelete(_.dataId === data2.id.asDataId))
+          select <- db.run(table.hSelectAllPast(timePoint).result)
+        } yield select
+
+        prepare(action).map { result =>
+          result.map(_.toData) shouldBe Seq(data4, data2.copy(otherValue = Some("must be selected"))).map(_.toData)
+        }
+      }
+    }
 
     "hUpdateOrInsert" should {
       "execute hInsert action with a given data if there is no data with the same dataId" in {
@@ -486,6 +549,25 @@ class VersioningSpec
   }
 
 
+  class TimedAction[T](action: => Future[T], delaySec: Duration = Duration(0, SECONDS)) {
+    private var startedAt: Option[LocalDateTime] = None
+    private var finishedAt: Option[LocalDateTime] = None
+
+    def run(): Future[T] = {
+      Thread.sleep(delaySec.toMillis)
+      for {
+        _ <- Future.successful(startedAt = Some(nowUTC()))
+        result <- action
+        _ <- Future.successful(finishedAt = Some(nowUTC()))
+      } yield result
+    }
+
+    def getStartPoint: Option[LocalDateTime] = startedAt
+
+    def getFinishPoint: Option[LocalDateTime] = finishedAt
+  }
+
+
   object SetupConcurrentUpdate extends Setup {
 
     def prepare[R](a: => Future[R])(conf: FreezeTransactionSetup): Future[R] =
@@ -531,24 +613,6 @@ class VersioningSpec
            |)
            |execute procedure fnDelay();
        """.stripMargin
-    }
-
-    class TimedAction[T](action: => Future[T], delaySec: Duration = Duration(0, SECONDS)) {
-      private var startedAt: Option[LocalDateTime] = None
-      private var finishedAt: Option[LocalDateTime] = None
-
-      def run(): Future[T] = {
-        Thread.sleep(delaySec.toMillis)
-        for {
-          _ <- Future.successful(startedAt = Some(nowUTC()))
-          result <- action
-          _ <- Future.successful(finishedAt = Some(nowUTC()))
-        } yield result
-      }
-
-      def getStartPoint: Option[LocalDateTime] = startedAt
-
-      def getFinishPoint: Option[LocalDateTime] = finishedAt
     }
 
   }

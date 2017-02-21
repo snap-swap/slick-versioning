@@ -1,6 +1,6 @@
 name := "slick-versioning"
 
-version := "1.0.2"
+version := "1.0.3"
 
 organization := "com.snapswap"
 
@@ -33,7 +33,6 @@ libraryDependencies ++= {
     "com.typesafe.slick" %% "slick" % slickV,
     "ch.qos.logback" % "logback-classic" % "1.1.7" % "test",
     "org.scalatest" %% "scalatest" % "3.0.1" % "test",
-    "com.opentable.components" % "otj-pg-embedded" % "0.7.1" % "test",
-    "com.snapswap" %% "slick-postgres-helpers" % "1.0.2"
+    "com.opentable.components" % "otj-pg-embedded" % "0.7.1" % "test"
   )
 }

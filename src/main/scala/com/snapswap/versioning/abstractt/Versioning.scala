@@ -95,7 +95,22 @@ trait Versioning[DataIdDatabaseType, VersionIdDatabaseType, VersionDtType, Versi
                                  versionDtMapper: MapperType[VersionDt]) {
 
       /*
-      * SELECT OPERATORS, output result contains only actual versions
+      * SELECT OPERATORS FOR HISTORICAL SLICING,
+      * output result contains actual versions at the certain time point at past
+      * */
+      private def selectPastActualVersionsQuery(dataset: Query[T, H, Seq], timePoint: VersionDt): Query[T, H, Seq] = {
+        dataset.filter{v => v.versionCreatedAt <= timePoint && (v.versionDeletedAt > timePoint || v.versionDeletedAt.isEmpty)}
+      }
+
+      def hSelectPast[R <: Rep[_]](timePoint: VersionDt)(where: T => R)(implicit wt: CanBeQueryCondition[R]): Query[T, H, Seq] =
+        selectPastActualVersionsQuery(table.filter(where), timePoint)
+
+      def hSelectAllPast[R <: Rep[_]](timePoint: VersionDt): Query[T, H, Seq] =
+        selectPastActualVersionsQuery(table, timePoint)
+
+
+      /*
+      * SELECT OPERATORS FOR CURRENT ACTUAL VERSIONS, output result contains only actual versions
       * */
       private def selectActualVersionsQuery(dataset: Query[T, H, Seq]): Query[T, H, Seq] = {
         dataset.filter(_.isActual)

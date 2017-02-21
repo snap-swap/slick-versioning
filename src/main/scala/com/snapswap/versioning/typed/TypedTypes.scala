@@ -6,10 +6,10 @@ import java.util.UUID
 
 import com.snapswap.versioning.abstractt.Types
 import com.snapswap.versioning.utils.{LocalDateTimeHelper, StringToPostgresHash}
-//import slick.jdbc.PostgresProfile
-import com.snapswap.db.driver.ExtendedPostgresProfile
+import slick.jdbc.PostgresProfile
 
-trait TypedTypes extends Types[String, String, LocalDateTime, Timestamp] with /*PostgresProfile*/ ExtendedPostgresProfile {
+
+trait TypedTypes extends Types[String, String, LocalDateTime, Timestamp] with PostgresProfile {
 
   import API._
 
@@ -25,11 +25,11 @@ trait TypedTypes extends Types[String, String, LocalDateTime, Timestamp] with /*
       x => VersionIdClass(x)
     )
 
-//  implicit def versionDtMapper: BaseColumnType[VersionDt] =
-//    MappedColumnType.base[VersionDt, BaseVersionDt](
-//      x => Timestamp.valueOf(x),
-//      x => VersionDt(x)
-//    )
+  implicit def versionDtMapper: BaseColumnType[VersionDt] =
+    MappedColumnType.base[VersionDt, BaseVersionDt](
+      x => Timestamp.valueOf(x),
+      x => VersionDt(x)
+    )
 
 
   case class DataIdClass(value: String) extends DataId {
