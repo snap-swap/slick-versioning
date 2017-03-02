@@ -20,7 +20,7 @@ trait TypedTypes extends Types[String, String, LocalDateTime, Timestamp] with Po
     )
 
   implicit def versionIdMapper: BaseColumnType[VersionId] =
-    MappedColumnType.base[VersionId, BaseDataId](
+    MappedColumnType.base[VersionId, BaseVersionId](
       x => x.baseValue,
       x => VersionIdClass(x)
     )
