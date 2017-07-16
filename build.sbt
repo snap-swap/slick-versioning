@@ -1,6 +1,6 @@
 name := "slick-versioning"
 
-version := "1.0.4"
+version := "1.0.5"
 
 organization := "com.snapswap"
 
@@ -27,7 +27,7 @@ scalacOptions := Seq(
 
 
 libraryDependencies ++= {
-  val slickV = "3.2.0-M1"
+  val slickV = "3.2.0"
 
   Seq(
     "com.typesafe.slick" %% "slick" % slickV,
