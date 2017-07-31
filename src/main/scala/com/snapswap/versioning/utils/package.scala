@@ -8,7 +8,7 @@ package object utils {
   object StringToPostgresHash {
     def md5(value: String): String = {
       MessageDigest.getInstance("MD5")
-        .digest(value.getBytes())
+        .digest(value.getBytes("UTF-8"))
         .map("%02x".format(_)) //postgres returns result in hexadecimal, we too
         .mkString
     }
