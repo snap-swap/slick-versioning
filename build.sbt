@@ -1,6 +1,6 @@
 name := "slick-versioning"
 
-version := "1.0.6"
+version := "1.0.7"
 
 organization := "com.snapswap"
 
@@ -29,7 +29,7 @@ libraryDependencies ++= {
   val slickV = "3.2.1"
 
   Seq(
-    "com.typesafe.slick" %% "slick" % slickV,
+    "com.typesafe.slick" %% "slick" % slickV % "provided",
     "ch.qos.logback" % "logback-classic" % "1.1.7" % "test",
     "org.scalatest" %% "scalatest" % "3.0.1" % "test",
     "com.opentable.components" % "otj-pg-embedded" % "0.7.1" % "test"
